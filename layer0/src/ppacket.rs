@@ -1,6 +1,6 @@
 use crate::hashing;
 
-
+#[derive(Serialize, Deserialize, Debug)]
 pub struct PPacket{
     pub command : u64,
     pub payload_size : u32,
