@@ -2,11 +2,10 @@ mod hashing;
 mod ppacket;
 mod client;
 mod jsonize;
-use json::JsonValue;
 use ppacket::PPacket;
+use tokio::io::AsyncWriteExt;
 use tokio::net::{TcpListener, TcpStream};
-use std::time::Duration;
-use crate::jsonize::Jsonize;
+use tokio::fs;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde;
@@ -28,7 +27,8 @@ async fn main() {
     tokio::spawn(async move{
         application_handle().await;
     });
-    let packet : PPacket = PPacket::new(1 , b"abc");
+    let packet : PPacket = PPacket::from_str(1 , "I have a message for you!");
+    println!("overall checksum : {}", packet.overall_checksum());
     let mut stream : TcpStream = TcpStream::connect("0.0.0.0:1234").await.unwrap();
     //tokio::time::sleep(Duration::from_secs(3)).await;
     client::send_ppacket(&mut stream, &packet).await;
@@ -50,7 +50,7 @@ async fn server_handle(){
             }
         }
         else{
-            println!("Failed to bind, check port availability"); 
+            println!("Failed to bind server, check port availability"); 
         }    
 }
 
@@ -68,6 +68,6 @@ async fn application_handle(){
             }
         }
         else{
-            println!("Failed to bind, check port availability"); 
+            println!("Failed to bind app communicator, check port availability"); 
         }    
 }

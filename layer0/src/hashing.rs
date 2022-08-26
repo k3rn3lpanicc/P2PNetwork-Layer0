@@ -6,7 +6,7 @@ use crypto::sha3::Sha3;
 pub fn get_hash(bytes : &[u8])->String{
     let mut hasher = Sha3::sha3_256();
     //hasher.input_str(bytes);
-    hasher.input(bytes);
+    hasher.input(bytes);    
     let result = hasher.result_str();
     result
 }
