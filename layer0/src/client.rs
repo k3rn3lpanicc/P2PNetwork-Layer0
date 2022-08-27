@@ -3,14 +3,15 @@ use std::fs::OpenOptions;
 use tokio::net::TcpStream;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::fs;
+use crate::hashing;
 use crate::jsonize::{self, Jsonize};
 use crate::ppacket::{PPacket, from_byte_vec};
 
 pub async fn save_hash_to_file(file_name : &str){
     let mut file = fs::File::create(file_name).await.unwrap();
-    let hash = crate::hashing::get_hash_str("Hello World");
-    
+    let hash = crate::hashing::get_hash_str("Hello World"); 
     file.write_all(hash.as_bytes()).await.unwrap();
+
 }
 
 pub async fn send_ppacket(stream : &mut TcpStream, packet : &PPacket){
@@ -34,7 +35,14 @@ pub async fn handle_client(stream : &mut TcpStream){
     loop{
         let packet : PPacket = read_ppacket(stream).await;
         if packet.is_valid(){
-            println!("Received command : {} , payload_size : {} , checksum : {} , payload : {:?} , payload in str format : {:?}" , packet.command,packet.payload_size,packet.checksum,packet.payload , std::str::from_utf8(&packet.payload).unwrap());
+            if !hashing::does_hash_exist(&packet.overall_checksum()){
+                println!("Received command : {} , payload_size : {} , checksum : {} , payload : {:?} , payload in str format : {:?}" , packet.command,packet.payload_size,packet.checksum,packet.payload , std::str::from_utf8(&packet.payload).unwrap());
+        
+                hashing::add_msg_hash(&packet.overall_checksum());
+            }
+            else {
+                println!("the message is already in the database");
+            }
         }
         else{
             println!("Invalid packet");
