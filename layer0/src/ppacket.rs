@@ -19,6 +19,7 @@ pub fn from_byte_vec(bytes : &[u8])->PPacket{
         payload,
     }
 }
+#[allow(dead_code)]
 impl PPacket{
     pub fn new(command : u64, payload : &[u8])->PPacket{
         let payload_size = payload.len() as u32;

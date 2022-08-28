@@ -1,12 +1,13 @@
+#[allow(unused_imports)]
 use std::fs::OpenOptions;
-
+use crate::logger;
 use tokio::net::TcpStream;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::fs;
 use crate::hashing;
 use crate::jsonize::{self, Jsonize};
 use crate::ppacket::{PPacket, from_byte_vec};
-
+#[allow(dead_code)]
 pub async fn save_hash_to_file(file_name : &str){
     let mut file = fs::File::create(file_name).await.unwrap();
     let hash = crate::hashing::get_hash_str("Hello World"); 
@@ -30,22 +31,36 @@ pub async fn read_ppacket(stream : &mut TcpStream)->PPacket{
     }
     from_byte_vec(&message)
 }
-pub async fn handle_client(stream : &mut TcpStream){
+
+pub async fn handle_client(stream : &mut TcpStream , mode : &str){
+    
     //here we will read the ppackets and proccess them
     loop{
         let packet : PPacket = read_ppacket(stream).await;
         if packet.is_valid(){
             if !hashing::does_hash_exist(&packet.overall_checksum()){
-                println!("Received command : {} , payload_size : {} , checksum : {} , payload : {:?} , payload in str format : {:?}" , packet.command,packet.payload_size,packet.checksum,packet.payload , std::str::from_utf8(&packet.payload).unwrap());
-        
+                logger::log(format!("Received command : {} , payload_size : {} , checksum : {} , payload : {:?} , payload in str format : {:?}" , packet.command,packet.payload_size,packet.checksum,packet.payload , std::str::from_utf8(&packet.payload).unwrap()).as_str(), logger::LOGTYPE::INFO);
+                if mode == "hardcode"{
+                    if packet.command == 1{
+                        let payload = std::str::from_utf8(&packet.payload).unwrap();
+                        let json = jsonize::from_str(payload);
+                        if json.has_key("ip"){
+                            let ip = json.get_key("ip");
+                            let port = json.get_key("port");
+                            let address = format!("{}:{}" , ip , port);
+                            logger::log(format!("address : {}",address).as_str() , logger::LOGTYPE::INFO);
+                        } 
+                               
+                    }
+                }
                 hashing::add_msg_hash(&packet.overall_checksum());
             }
             else {
-                println!("the message is already in the database");
+                logger::log("the message is already in the database" , logger::LOGTYPE::ERROR);
             }
         }
         else{
-            println!("Invalid packet");
+            logger::log("Invalid packet!", logger::LOGTYPE::ERROR);
         }
     }
 }
