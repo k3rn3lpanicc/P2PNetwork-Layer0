@@ -15,6 +15,7 @@ use colored::Colorize;
 
 use crate::logger::Logger;
 mod logger;
+use logger::LOGTYPE;
 
 #[allow(dead_code, unused_imports)]
 
@@ -29,7 +30,7 @@ const PORT_NUMBER : u16 = 1234;
 async fn main() {
     let args: Vec<String> = env::args().collect();
     let mut mode = if args.len()>1 && args[1] == "hardcode" { "hardcode" } else { "client" }; 
-    println!("mode : {}",mode);
+    format!("mode : {}",mode.bright_white()).log(LOGTYPE::DEBUG);
     tokio::spawn(async move{
         server_handle(&mut mode).await;
     });
@@ -40,14 +41,12 @@ async fn main() {
 
 
     let packet : PPacket = PPacket::from_str(1 , r##"{"ip":"192.168.1.1" , "port":"1234"}"##);
-    println!("overall checksum : {}", packet.overall_checksum());
+    format!("overall checksum : {}", packet.overall_checksum()).log(LOGTYPE::DEBUG);
     let mut stream : TcpStream = TcpStream::connect("0.0.0.0:1234").await.unwrap();
-    //tokio::time::sleep(Duration::from_secs(3)).await;
-    for i in 0..100{
+    for _i in 0..100{
     std::thread::sleep(std::time::Duration::from_millis(1000));
     client::send_ppacket(&mut stream, &packet).await;
-    format!("Sent {}" , packet.overall_checksum().bright_magenta()).as_str().log(logger::LOGTYPE::INFO);
-    //println!("Sent {}" , packet.overall_checksum());
+    format!("Sent {}" , packet.overall_checksum().bright_magenta()).as_str().log(LOGTYPE::INFO);
     }
     loop{}
 }
@@ -56,35 +55,33 @@ async fn main() {
 async fn server_handle(mode :  &'static str) {
     let address : String = format!("{}:{}" , "0.0.0.0" , PORT_NUMBER);
         if let Ok(listener) = TcpListener::bind(address).await{ 
-            println!("Listening on Server side");
+            format!("Listening on Server side").red().to_string().log(LOGTYPE::INFO);
             loop{
                 let (mut stream , _address) = listener.accept().await.unwrap();
-                println!("New connection from {}", _address);
+                format!("New connection from {}", _address.to_string().bright_magenta()).log(LOGTYPE::INFO);
                 tokio::spawn(async move{
                     client::handle_client(&mut stream , mode).await;
                 });
-                println!("Handed the connection to a client handler");
             }
         }
         else{
-            println!("Failed to bind server, check port availability"); 
+            format!("Failed to bind server, check port availability").log(LOGTYPE::ERROR); 
         }    
 }
 
 async fn application_handle(){
     let address : String = format!("{}:{}" , "127.0.0.1" , APPLICATION_PORT);
         if let Ok(listener) = TcpListener::bind(address).await{ 
-            println!("Listening on application side");
+            format!("Listening on application side").red().to_string().log(LOGTYPE::INFO);
             loop{
                 let (mut stream , _address) = listener.accept().await.unwrap();
-                println!("New connection from {}", _address);
+                format!("New connection from {}", _address.to_string().bright_magenta()).log(LOGTYPE::INFO);
                 tokio::spawn(async move {
                     client::handle_application(&mut stream).await;
                 });
-                println!("Handed the application to a aplication handler");
             }
         }
         else{
-            println!("Failed to bind app communicator, check port availability"); 
+            format!("Failed to bind app communicator, check port availability").log(LOGTYPE::ERROR); 
         }    
 }

@@ -15,7 +15,7 @@ pub fn log(message : &str , log_type : LOGTYPE){
         LOGTYPE::INFO => format!("INFO").blue().bold(),
         LOGTYPE::WARN => format!("WARN").yellow().bold().underline(),
         LOGTYPE::ERROR => format!("ERROR").red().bold().underline(),
-        LOGTYPE::DEBUG => format!("DEBUG").cyan().bold(),
+        LOGTYPE::DEBUG => format!("DEBUG").bright_cyan().bold().underline().italic(),
     };
     println!("{} [{}] {}",time.bright_green().underline(),log_type,message.bright_white());
 }
@@ -28,4 +28,8 @@ impl Logger for &str {
         log(self , log_type);
     }
 }
-    
+impl Logger for String {
+    fn log(&self , log_type : LOGTYPE){
+        log(self.as_str() , log_type);
+    }
+}
