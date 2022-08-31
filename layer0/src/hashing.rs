@@ -9,7 +9,6 @@ use crate::logger::{Logger , LOGTYPE};
 pub async fn hash_remover(){
     let conn = Connection::open("hashes.db").unwrap();
     loop{
-        std::thread::sleep(time::Duration::from_secs(60));
         format!("Hash remover is removing hashes that are more than 1 minute old.").as_str().log(LOGTYPE::INFO); 
         if let Ok(_) = conn.execute("DELETE FROM hashes WHERE date < ?", [format!("{}" , time::SystemTime::now().duration_since(time::UNIX_EPOCH).unwrap().as_secs())]){
             //println!("Hashes removed");
@@ -17,6 +16,7 @@ pub async fn hash_remover(){
         else{
             println!("Failed to remove hashes");
         }
+        std::thread::sleep(time::Duration::from_secs(60));
     }
 }
 pub fn does_hash_exist(hash : &str)->bool{

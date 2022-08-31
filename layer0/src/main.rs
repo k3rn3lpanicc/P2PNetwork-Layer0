@@ -2,17 +2,15 @@ mod hashing;
 mod ppacket;
 mod client;
 mod jsonize;
+mod connections;
 use ppacket::PPacket;
-use tokio::io::AsyncWriteExt;
 use tokio::net::{TcpListener, TcpStream};
-use tokio::fs;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde;
 extern crate serde_json;
 use std::env;
 use colored::Colorize;
-
 use crate::logger::Logger;
 mod logger;
 use logger::LOGTYPE;
@@ -28,7 +26,10 @@ const APPLICATION_PORT : u16 = 48134;
 const PORT_NUMBER : u16 = 1234;
 #[tokio::main]
 async fn main() {
+    connections::start_redis_server().await;
     let args: Vec<String> = env::args().collect();
+    
+
     let mut mode = if args.len()>1 && args[1] == "hardcode" { "hardcode" } else { "client" }; 
     format!("mode : {}",mode.bright_white()).log(LOGTYPE::DEBUG);
     tokio::spawn(async move{

@@ -16,3 +16,4 @@ json = "0.12.4"
 rusqlite = "0.28.0"
 chrono = "0.4.22"
 colored = "2.0.0"
+redis = {version = "0.21.6", features = ["tokio-comp"]}

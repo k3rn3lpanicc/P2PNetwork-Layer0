@@ -1,6 +1,7 @@
 #[allow(unused_imports)]
 use std::fs::OpenOptions;
-use crate::logger;
+use crate::{logger, connections};
+use colored::Colorize;
 use tokio::net::TcpStream;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::fs;
@@ -33,9 +34,12 @@ pub async fn read_ppacket(stream : &mut TcpStream)->PPacket{
 }
 
 pub async fn handle_client(stream : &mut TcpStream , mode : &str){
-    
     //here we will read the ppackets and proccess them
     loop{
+        let nodes:Vec<connections::Connection> = connections::get_connections().await;
+        for node in nodes{
+            println!("{}:{}",node.ip.red() , node.port.to_string().red());
+        }
         let packet : PPacket = read_ppacket(stream).await;
         if packet.is_valid(){
             if !hashing::does_hash_exist(&packet.overall_checksum()){
@@ -49,7 +53,10 @@ pub async fn handle_client(stream : &mut TcpStream , mode : &str){
                             let port = json.get_key("port");
                             let address = format!("{}:{}" , ip , port);
                             logger::log(format!("address : {}",address).as_str() , logger::LOGTYPE::INFO);
-                        } 
+                            let ipp = ip.as_str().unwrap();
+                            connections::add_connection(ipp, port.to_string().parse::<i8>().unwrap()).await;
+                        }
+
                                
                     }
                 }
