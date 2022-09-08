@@ -1,3 +1,5 @@
+use std::default;
+
 use colored::Colorize;
 
 pub enum LOGTYPE {
@@ -12,12 +14,12 @@ pub fn log(message : &str , log_type : LOGTYPE){
     let time = time.format("%Y-%m-%d %H:%M:%S");
     let time = time.to_string();
     let log_type = match log_type {
-        LOGTYPE::INFO => format!("INFO").blue().bold(),
-        LOGTYPE::WARN => format!("WARN").yellow().bold().underline(),
-        LOGTYPE::ERROR => format!("ERROR").red().bold().underline(),
-        LOGTYPE::DEBUG => format!("DEBUG").bright_cyan().bold().underline().italic(),
+        LOGTYPE::INFO => "INFO ".to_string().bright_yellow().bold(),
+        LOGTYPE::WARN => "WARN".to_string().yellow().bold().underline(),
+        LOGTYPE::ERROR => "ERROR".to_string().red().bold().underline(),
+        LOGTYPE::DEBUG => "DEBUG".to_string().bright_cyan().bold().underline().italic(),
     };
-    println!("{} [{}] {}",time.bright_green().underline(),log_type,message.bright_white());
+    println!("->>  ({}) [{}]  {}",time.black().underline().on_green(),log_type,message.bright_white());
 }
 
 pub trait Logger {

@@ -1,5 +1,7 @@
 #[allow(unused_imports)]
 use std::fs::OpenOptions;
+use crate::connections::{change_state, Connection, get_connection_with_add};
+use crate::logger::{LOGTYPE, Logger};
 use crate::{logger, connections};
 use colored::Colorize;
 use tokio::net::TcpStream;
@@ -16,11 +18,14 @@ pub async fn save_hash_to_file(file_name : &str){
 
 }
 
-pub async fn send_ppacket(stream : &mut TcpStream, packet : &PPacket){
+pub async fn send_ppacket(stream : &mut TcpStream, packet : &PPacket) -> Result<bool , &'static str>{
     let message = packet.to_byte_vec();
-    stream.write_all(&message).await.unwrap();
+    if stream.write_all(&message).await.is_ok(){
+        return   Ok(true);
+    }
+    Err("Connection closed!")
 }
-pub async fn read_ppacket(stream : &mut TcpStream)->PPacket{
+pub async fn read_ppacket(stream : &mut TcpStream)->Result<PPacket,&'static str>{
     let mut message = vec![];
     let mut buf = [0; 1024];
     loop{
@@ -30,53 +35,76 @@ pub async fn read_ppacket(stream : &mut TcpStream)->PPacket{
             break;
         }
     }
-    from_byte_vec(&message)
+    if message.is_empty() {
+        return Err("Connection Closed!");
+    }
+    Ok(from_byte_vec(&message))
 }
 
 pub async fn show_connections(){
     if connections::get_connections_len().await!=0{
-        println!("Connections : ");
+        "Connections : ".log(LOGTYPE::DEBUG);
         let cons = connections::get_connections().await;
         for k in cons{
-            println!("{}:{}" , k.ip , k.port);
+            println!("\t\t\t\t\t\t\t|{}:{}|" , k.ip.bright_green() , k.port.to_string().bright_magenta());
         }
     }
 }
 
 pub async fn handle_client(stream : &mut TcpStream , mode : &'static str){
-    //here we will read the ppackets and proccess them
+    //!!!todo : add a ping-pong mechanism to handle the incoming packet just inside this function!!!
+    //todo : if user didn't send a ppacket in a amount of time, close the connection
     loop{
         show_connections().await;
-        let packet : PPacket = read_ppacket(stream).await;
-        if packet.is_valid(){
-            if !hashing::does_hash_exist(&packet.overall_checksum()){
-                logger::log(format!("Received command : {} , payload_size : {} , checksum : {} , payload : {:?} , payload in str format : {:?}" , packet.command,packet.payload_size,packet.checksum,packet.payload , std::str::from_utf8(&packet.payload).unwrap()).as_str(), logger::LOGTYPE::INFO);
-                if mode == "hardcode"{
-                    if packet.command == 1{
-                        let payload = std::str::from_utf8(&packet.payload).unwrap();
-                        let json = jsonize::from_str(payload);
-                        if json.has_key("ip"){
-                            let ip = json.get_key("ip");
-                            let port = json.get_key("port");
-                            let address = format!("{}:{}" , ip , port);
-                            logger::log(format!("address : {}",address).as_str() , logger::LOGTYPE::INFO);
-                            let ipp = ip.as_str().unwrap();
-                            println!("ipp : {}",ipp);
-                            println!("{}" , format!("{}:{}" , ipp , port).bright_yellow());
-                            println!("Hellloooo");
-                            connections::add_connection(ipp, port.to_string().parse().unwrap()).await;
-                            println!("{}" , "Connection added".green());
-                        }                               
+        if let Ok(packet ) = read_ppacket(stream).await{
+            if packet.is_valid(){
+                if !hashing::does_hash_exist(&packet.overall_checksum()){
+                    logger::log(format!("Received command : {} , checksum : {}.. , payload : {}" , packet.command,&packet.checksum[0..16], std::str::from_utf8(&packet.payload).unwrap()).as_str(), logger::LOGTYPE::INFO);
+                    match packet.command{
+                        1 => {
+                            let payload = std::str::from_utf8(&packet.payload).unwrap();
+                            let json = jsonize::from_str(payload);
+                            //println!("Received json : {}" , json);
+                            if json.has_key("ip"){
+                                let ip = json.get_key("ip");
+                                let port = json.get_key("port");
+                                let ipp = ip.as_str().unwrap();
+                                connections::add_connection(ipp, port.to_string().parse().unwrap()).await;
+                                format!("{} {}:{}" , "Connection added : ".bright_white() , ip.to_string().green(),port.to_string().green()).log(LOGTYPE::INFO);
+                            }   
+                        },
+                        2 => {
+                            if packet.is_ping(){
+                                format!("{}" , "Received ping".green()).log(LOGTYPE::INFO);
+                                let packet = PPacket::pong();
+                                send_ppacket(stream, &packet).await.unwrap();
+                                break;
+                            }
+                            else if packet.is_pong() {
+                                format!("{}" , "Received pong".green()).log(LOGTYPE::INFO);
+                                change_state(&get_connection_with_add(stream.peer_addr().unwrap().ip().to_string().as_str(), stream.peer_addr().unwrap().port() as i64), "Pong");
+                                break;
+                            }
+                            
+                        },
+                        _ => {
+                            println!("Command not found!");
+                        }
                     }
+                    hashing::add_msg_hash(&packet.overall_checksum());
+                    break;
                 }
-                hashing::add_msg_hash(&packet.overall_checksum());
+                else {
+                    logger::log("the message is already in the database" , logger::LOGTYPE::ERROR);
+                }
             }
-            else {
-                logger::log("the message is already in the database" , logger::LOGTYPE::ERROR);
+            else{
+                logger::log("Invalid packet!", logger::LOGTYPE::ERROR);
             }
         }
         else{
-            logger::log("Invalid packet!", logger::LOGTYPE::ERROR);
+            "Disconnected!".log(LOGTYPE::ERROR);
+            break;
         }
     }
 }
@@ -109,7 +137,8 @@ pub async fn handle_application(stream : &mut TcpStream){
                 stream.write_all(b"Unknown command").await.unwrap();
                 //do something
             }
-        }        
+        }       
+        
     }
     else{
         stream.write_all(b"command does not exist").await.unwrap();

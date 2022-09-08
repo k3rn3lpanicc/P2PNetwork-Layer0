@@ -1,7 +1,5 @@
-use std::ptr::null;
-
 use crate::ppacket::PPacket;
-use json::{self, object, JsonValue};
+use json::{self, JsonValue};
 
 pub fn serialize_ppacket(packet : &PPacket)->String{
     serde_json::to_string(&packet).unwrap()
