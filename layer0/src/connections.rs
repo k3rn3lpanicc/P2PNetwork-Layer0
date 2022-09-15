@@ -1,12 +1,13 @@
 use std::time::Duration;
 use colored::Colorize;
-use tokio::{net::TcpStream, stream};
+use tokio::net::TcpStream;
 
 use crate::{logger::{LOGTYPE, Logger}, ppacket::PPacket, client};
 const CONNECTIONS_LEN :i32 = 8;
 const CONNECTION_TIME: u64 = 3;
 
 
+pub const APP_NUMBER : i64 = 5;
 
 #[derive(Clone)]
 pub struct Connection{
@@ -27,14 +28,58 @@ pub fn con_to_connection(con : &Con)->Connection{
         port : con.port.to_owned().parse::<i64>().unwrap(),
     }
 }
-
-pub fn get_connection()-> rusqlite::Connection{ rusqlite::Connection::open("hashes.db").unwrap() }
-
-pub async fn clean_server(){
-    get_connection().execute("DELETE FROM cons", []).unwrap();    
+pub fn create_database() {
+    "Creating Database ...".log(LOGTYPE::INFO);
+    match rusqlite::Connection::open(format!("hashes{}.db" , APP_NUMBER)){
+        Ok(con)=>{
+            if let Err(err) = con.execute(r##"CREATE TABLE "cons" (
+                "ind"	INTEGER NOT NULL UNIQUE,
+                "ip"	TEXT NOT NULL,
+                "port"	TEXT NOT NULL
+            , "state"	TEXT NOT NULL DEFAULT 'Connected')"##, []){
+                if err.to_string().contains("already exists"){
+                    "Table cons already exists".log(LOGTYPE::INFO);
+                }
+                else{
+                    format!("Error creating database : {}", err).log(LOGTYPE::ERROR);
+                }
+            }
+            if let Err(err) = con.execute(r##"CREATE TABLE "hashes" (
+                "msg_hash"	TEXT NOT NULL UNIQUE,
+                "date"	NUMERIC NOT NULL
+            )"##, []){
+                if err.to_string().contains("already exists"){
+                    "Table hashes already exists".log(LOGTYPE::INFO);
+                }
+                else{
+                    format!("Error creating database : {}", err).log(LOGTYPE::ERROR);
+                }
+            }
+            "Database Created".log(LOGTYPE::INFO);
+        },
+        Err(err)=>{
+            format!("Error creating database : {}", err).log(LOGTYPE::ERROR);
+        }
+    }
+    
 }
+pub fn get_connection()-> rusqlite::Connection{ 
+    match rusqlite::Connection::open(format!("hashes{}.db" , APP_NUMBER)){
+        Ok(con)=>{
+            return con;
+        },
+        Err(err)=>{
+            format!("Error creating database : {}", err).log(LOGTYPE::ERROR);
+            panic!("OKOKOKOK");
+        }
+    }
+ }
 
-pub async fn add_connection(ip : &str, port : i8){
+//pub async fn clean_server(){
+//    get_connection().execute("DELETE FROM cons", []).unwrap();    
+//}
+
+pub async fn add_connection(ip : &str, port : i64){
     if get_connections_len().await == CONNECTIONS_LEN {
         return;
     }
@@ -42,7 +87,9 @@ pub async fn add_connection(ip : &str, port : i8){
     let mut stmt = conn.prepare("SELECT * FROM cons WHERE ip = ? AND port = ?").unwrap();
     let rows = stmt.query_map([ip , port.to_string().as_str()] , |_row|{Ok(1)}).unwrap();
     if rows.count() == 0{
-        conn.execute("INSERT INTO cons (ind , ip , port) VALUES (? , ? , ?)", [get_next_index().to_owned().to_string().as_str(), ip , port.to_string().as_str()]).unwrap();
+        if let Err(err) = conn.execute("INSERT INTO cons (ind , ip , port) VALUES (? , ? , ?)", [get_next_index().to_owned().to_string().as_str(), ip , port.to_string().as_str()]){
+            format!("Error adding connection : {}", err).log(LOGTYPE::ERROR);
+        }
     }
     else{
         format!("Connection {} : {} already exists" , ip , port).log(LOGTYPE::ERROR);
@@ -133,6 +180,9 @@ pub async fn send_ping(con : &Connection) -> bool{
 
 pub async fn check_connections(){
     let connections = get_connections().await;
+    if connections.len()==0{
+        return;
+    }
     for con in connections{
         tokio::spawn(async move {
             format!("Sending Ping to ->> {}:{}" , con.ip.to_string().green() , con.port.to_string().green()).log(LOGTYPE::INFO);

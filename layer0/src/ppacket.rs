@@ -8,18 +8,29 @@ pub struct PPacket{
     pub payload : Vec<u8>,
 }
 
-pub fn from_byte_vec(bytes : &[u8])->PPacket{
-    
+pub fn from_byte_vec(bytes : &[u8])->Result<PPacket , &'static str>{
+    if bytes.len()<12{
+        return Err("Corrupted packet! : less than 12 bytes");
+    }
     let command = u64::from_le_bytes(bytes[0..8].try_into().unwrap());
     let payload_size = u32::from_le_bytes(bytes[8..12].try_into().unwrap());
-    let checksum = String::from_utf8(bytes[12..(bytes.len()-payload_size as usize)].to_vec()).unwrap();
-    let payload = bytes[(bytes.len()-payload_size as usize)..].to_vec();
-    PPacket{
+    if payload_size > bytes.len() as u32{
+        return Err("Corrupted packet! : payload size is bigger than the packet size");
+    }
+    if (bytes.len() as u32 - payload_size) <= 12 {
+        return Err("Corrupted packet! : there are less than 12 bytes in packet!");
+    }
+    let checksum = String::from_utf8(bytes[12..(bytes.len() as u32 -payload_size) as usize].to_vec()).unwrap();
+    let payload = bytes[(bytes.len() as u32-payload_size as u32) as usize..].to_vec();
+    if payload.len() as u32  != payload_size as u32{
+        return Err("Corrupted packet! : payload size is not equal to the payload_size");
+    }
+    Ok(PPacket{
         command,
         payload_size,
         checksum,
         payload,
-    }
+    })
 }
 #[allow(dead_code)]
 impl PPacket{
@@ -38,6 +49,9 @@ impl PPacket{
     }
     pub fn pong()->PPacket{
         PPacket::new(0, b"Pong")
+    }
+    pub fn con_req(my_ip : &str , my_port : i64)->PPacket{
+        PPacket::new(1, format!("{{\"ip\":\"{}\",\"port\":\"{}\"}}" , my_ip , my_port).as_bytes())
     }
     pub fn is_ping(&self)->bool{
         self.command == 0 && self.payload == b"Ping"
@@ -72,4 +86,5 @@ impl PPacket{
     pub fn overall_checksum(&self)->String{
         hashing::get_hash(&(self.to_byte_vec()))
     }
+
 }

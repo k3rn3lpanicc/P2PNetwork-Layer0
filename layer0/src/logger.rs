@@ -1,5 +1,3 @@
-use std::default;
-
 use colored::Colorize;
 
 pub enum LOGTYPE {
