@@ -1,6 +1,8 @@
 use colored::Colorize;
 
+#[derive(PartialEq)]
 pub enum LOGTYPE {
+    MORE_INFO,
     INFO,
     WARN,
     ERROR,
@@ -8,10 +10,16 @@ pub enum LOGTYPE {
 }
 
 pub fn log(message : &str , log_type : LOGTYPE){
+    if log_type==LOGTYPE::MORE_INFO{
+        return;
+    }
+
     let time = chrono::Local::now();
-    let time = time.format("%Y-%m-%d %H:%M:%S");
+    //%Y-%m-%d %H:%M:%S
+    let time = time.format("%H:%M:%S");
     let time = time.to_string();
     let log_type = match log_type {
+        LOGTYPE::MORE_INFO => "MINFO".bright_green().underline(),
         LOGTYPE::INFO => "INFO ".to_string().bright_yellow().bold(),
         LOGTYPE::WARN => "WARN".to_string().yellow().bold().underline(),
         LOGTYPE::ERROR => "ERROR".to_string().red().bold().underline(),

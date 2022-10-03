@@ -1,7 +1,7 @@
 use std::{time::Duration, error::Error, sync::{Arc, Mutex}, collections::HashMap, thread};
 use colored::Colorize;
 use std::net::TcpStream;
-use crate::{logger::{LOGTYPE, Logger}, ppacket::PPacket, client};
+use crate::{logger::{LOGTYPE, Logger}, ppacket::PPacket, client::{self, show_connections}};
 use std::process::Command;
 const CONNECTIONS_LEN :i32 = 8;
 const CONNECTION_TIME: u64 = 3;
@@ -130,20 +130,15 @@ pub fn send_ping(con : &Connection) -> Result<bool , Box<dyn Error>>{
     let mut stream = TcpStream::connect(format!("{}:{}" , con.ip , con.port))?; //add timeout to this line todo
     let _s = client::send_ppacket(&mut stream, &PPacket::ping())?; //add timeout to this line todo
     if change_state(con, "Ping"){
-        format!("Sent Ping to {}:{} ... Waiting for Response (2secs)", con.id,con.port).log(LOGTYPE::INFO);
-        std::thread::sleep(Duration::from_secs(2));
-        
+        std::thread::sleep(Duration::from_millis(500));
         let state = get_state(con);
         if state == "Pong"{
-            format!("Ping to {}:{} was successful", con.id,con.port).log(LOGTYPE::INFO);
             return Ok(true);
         }
         else{
-            format!("Ping to {}:{} timed out", con.id,con.port).log(LOGTYPE::INFO);
             return Ok(false);
         }
     }
-    //"Couldn't Change DB for Pinging!".log(LOGTYPE::ERROR);
     return Ok(true);
 }
 
@@ -153,15 +148,15 @@ pub fn check_connections(){
         return;
     }
     for con in connections{
-        format!("Sending Ping to ->> {}:{}" , con.ip.to_string().green() , con.port.to_string().green()).log(LOGTYPE::INFO);
+        format!("Sending Ping to ->> {}:{}" , con.ip.to_string().green() , con.port.to_string().green()).log(LOGTYPE::MORE_INFO);
        // let res = send_ping(&con).await.un;
         match send_ping(&con){
             Ok(b)=>{
                 if b{
-                    format!("Ping to {}:{} was successful", con.id,con.port).magenta().to_string().log(LOGTYPE::INFO);
+                    format!("Ping to {}:{} was successful", con.id,con.port).magenta().to_string().log(LOGTYPE::MORE_INFO);
                 }
                 else{
-                    format!("Ping to {}:{} timed out", con.id,con.port).log(LOGTYPE::INFO);
+                    format!("Ping to {}:{} timed out", con.id,con.port).log(LOGTYPE::ERROR);
                     remove_connection(&con.ip , con.port);
                 }
                 
@@ -169,6 +164,7 @@ pub fn check_connections(){
             Err(k) => {
                 format!("Couldn't Ping {}:{}" , con.ip.to_string().red() , con.port.to_string().red()).log(LOGTYPE::ERROR);
                 remove_connection(&con.ip , con.port);
+                show_connections();
             }
         }
     }

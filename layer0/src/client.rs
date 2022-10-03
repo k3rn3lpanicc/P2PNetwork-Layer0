@@ -57,6 +57,64 @@ pub fn show_connections(){
     }
 }
 
+fn handle_connection_request(packet : PPacket) {
+    let payload = std::str::from_utf8(&packet.payload).unwrap();
+    let json = jsonize::from_str(payload);
+    if json.has_key("ip"){
+
+        //sending request to neighbour nodes (in a new thread)                               
+        thread::spawn(move || {
+            let ip = json.get_key("ip");
+            let port = json.get_key("port");
+            let ipp = ip.as_str().unwrap(); 
+            
+            let cons = connections::get_connections();
+            for k in cons{
+                match TcpStream::connect(format!("{}:{}",k.ip,k.port)){
+                    Ok(mut stream) => {
+                        let packets = PPacket::new(1, &json.to_string().as_bytes());
+                        if send_ppacket(&mut stream, &packets).is_ok(){
+                            hashing::add_msg_hash(&packets.overall_checksum());
+                            format!("Bounced connection request to {}:{}" , k.ip , k.port).bright_yellow().to_string().log(LOGTYPE::INFO);
+                        };
+                    },
+                    Err(e) => {
+                        e.to_string().log(LOGTYPE::ERROR);
+                    }
+                }
+            }    
+            
+            //here we should ask the node if it steel wants the connection or not, if it did, we should add it to our connections
+            
+            
+            if let Err(err) = connections::add_connection(ipp, port.to_string().parse::<i64>().unwrap()){
+                if format!("{}" , err).to_string() != "Connection already exists!".to_string(){
+                    logger::log(format!("Error while adding connection : {}" , err).as_str(), logger::LOGTYPE::ERROR);
+                }
+            }
+            else{
+                format!("{} {}:{}" , "Connection added : ".bright_white() , ipp.to_string().green(),port.to_string().green()).log(LOGTYPE::INFO);
+                show_connections();
+            }
+        });   
+    }
+
+}
+
+fn handle_ping_pong(packet : PPacket , stream : &mut TcpStream){
+    if packet.is_ping(){
+        format!("{}" , "Received ping".green()).log(LOGTYPE::INFO);
+        let packet = PPacket::pong();
+        send_ppacket(stream, &packet).unwrap();
+        "Sending Pong".bright_green().to_string().log(LOGTYPE::INFO);
+    }
+    else if packet.is_pong() {
+        format!("{}" , "Received pong".green()).log(LOGTYPE::INFO);
+        change_state(&get_connection_with_add(stream.peer_addr().unwrap().ip().to_string().as_str(), stream.peer_addr().unwrap().port() as i64), "Pong");
+    }
+}
+
+
 pub fn handle_client(stream : &mut TcpStream , mode : &'static str){
     //!!!todo : add a ping-pong mechanism to handle the incoming packet just inside this function!!!
     //todo : if user didn't send a ppacket in a amount of time, close the connection
@@ -69,54 +127,11 @@ pub fn handle_client(stream : &mut TcpStream , mode : &'static str){
                         logger::log(format!("Received command : {} , checksum : {}.. , payload : {}" , packet.command,&packet.checksum[0..16], std::str::from_utf8(&packet.payload).unwrap()).as_str(), logger::LOGTYPE::INFO);
                         hashing::add_msg_hash(&packet.overall_checksum());
                         match packet.command{
-                            1 => { // connection request
-                                let payload = std::str::from_utf8(&packet.payload).unwrap();
-                                let json = jsonize::from_str(payload);
-                                if json.has_key("ip"){
-                    
-                                    //sending request to neighbour nodes (in a new thread)                               
-                                    thread::spawn(move || {
-                                        let ip = json.get_key("ip");
-                                        let port = json.get_key("port");
-                                        let ipp = ip.as_str().unwrap(); 
-                                
-                                        let cons = connections::get_connections();
-                                        for k in cons{
-                                            match TcpStream::connect(format!("{}:{}",k.ip,k.port)){
-                                                Ok(mut stream) => {
-                                                    let packets = PPacket::new(1, &json.to_string().as_bytes());
-                                                    if send_ppacket(&mut stream, &packets).is_ok(){
-                                                        format!("Bounced connection request to {}:{}" , k.ip , k.port).bright_yellow().to_string().log(LOGTYPE::INFO);
-                                                    };
-                                                },
-                                                Err(e) => {
-                                                    e.to_string().log(LOGTYPE::ERROR);
-                                                }
-                                            }
-                                        }    
-                                        if let Err(err) = connections::add_connection(ipp, port.to_string().parse::<i64>().unwrap()){
-                                            logger::log(format!("Error while adding connection : {}" , err).as_str(), logger::LOGTYPE::ERROR);
-                                        }
-                                        format!("{} {}:{}" , "Connection added : ".bright_white() , ipp.to_string().green(),port.to_string().green()).log(LOGTYPE::INFO);
-                                    });
-                                    
-                                    
-                                }   
+                            1 => {
+                                handle_connection_request(packet);
                             },
                             2 => {
-                                if packet.is_ping(){
-                                    format!("{}" , "Received ping".green()).log(LOGTYPE::INFO);
-                                    let packet = PPacket::pong();
-                                    send_ppacket(stream, &packet).unwrap();
-                                    "Sending Pong".bright_green().to_string().log(LOGTYPE::INFO);
-                                    break;
-                                }
-                                else if packet.is_pong() {
-                                    format!("{}" , "Received pong".green()).log(LOGTYPE::INFO);
-                                    change_state(&get_connection_with_add(stream.peer_addr().unwrap().ip().to_string().as_str(), stream.peer_addr().unwrap().port() as i64), "Pong");
-                                    break;
-                                }
-                                
+                                handle_ping_pong(packet,stream);
                             },
                             _ => {
                                 println!("Command not found!");
@@ -125,7 +140,7 @@ pub fn handle_client(stream : &mut TcpStream , mode : &'static str){
                         break;
                     }
                     else {
-                        logger::log("the message is already in the database" , logger::LOGTYPE::ERROR);
+                        logger::log("Message Hash already in database" , logger::LOGTYPE::MORE_INFO);
                     }
                 }
                 else{
@@ -133,7 +148,10 @@ pub fn handle_client(stream : &mut TcpStream , mode : &'static str){
                 }
             },
             Err(err) =>{
-                format!("Disconnected! : {}" , err.bright_yellow()).log(LOGTYPE::ERROR);
+                if err == "Connection Closed!"{
+                    break;
+                }
+                format!("Disconnected : {}" , err.bright_yellow()).log(LOGTYPE::ERROR);
                 break;
             }
         }

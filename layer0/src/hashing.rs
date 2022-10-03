@@ -9,13 +9,12 @@ pub fn hash_remover(){
         
         let number_of_cons = connections::get_connections_len();
         let is_hardcode = connections::IS_HARDCODE.lock().unwrap().clone();
-        format!("IS Hardcoded ? {}", is_hardcode).log(LOGTYPE::INFO);
         if  number_of_cons < 8 && !is_hardcode{
             connections::send_connection_request();
         }
         drop(is_hardcode);
         remove_hashes();
-        "Hash remover removed hashes that are more than 1 minute old".log(LOGTYPE::INFO); 
+        "Hash remover removed hashes that are more than 1 minute old".log(LOGTYPE::MORE_INFO); 
         std::thread::sleep(time::Duration::from_secs(10));
     }
 }
@@ -41,7 +40,6 @@ pub fn does_hash_exist(hash : &str)->bool{
 pub fn add_msg_hash(hash: &str){
     let time = time::SystemTime::now().duration_since(time::UNIX_EPOCH).unwrap().as_secs();
     if does_hash_exist(hash){
-        println!("Already exists");
         return;
     }
     let mut hashes = connections::MSG_HASHES.lock().unwrap();

@@ -90,8 +90,8 @@ fn main() {
         // else{
         //     "Couldn't connect to server".log(LOGTYPE::ERROR);
         // }
-    th1.join();
-    th2.join();
+    th1.join().unwrap();
+    th2.join().unwrap();
 }
 
 
