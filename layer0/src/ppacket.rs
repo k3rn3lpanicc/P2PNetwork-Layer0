@@ -45,19 +45,19 @@ impl PPacket{
         }
     }
     pub fn ping()->PPacket{
-        PPacket::new(0, b"Ping")
+        PPacket::new(2, b"Ping")
     }
     pub fn pong()->PPacket{
-        PPacket::new(0, b"Pong")
+        PPacket::new(2, b"Pong")
     }
     pub fn con_req(my_ip : &str , my_port : i64)->PPacket{
         PPacket::new(1, format!("{{\"ip\":\"{}\",\"port\":\"{}\"}}" , my_ip , my_port).as_bytes())
     }
     pub fn is_ping(&self)->bool{
-        self.command == 0 && self.payload == b"Ping"
+        self.command == 2 && self.payload == b"Ping"
     }
     pub fn is_pong(&self)->bool{
-        self.command == 0 && self.payload == b"Pong"
+        self.command == 2 && self.payload == b"Pong"
     }
     pub fn from_str(command : u64, payload : &str)->PPacket{
         let payload_size = payload.len() as u32;

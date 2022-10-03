@@ -8,11 +8,10 @@ edition = "2021"
 [dependencies]
 hex-literal = "0.3.4"
 rust-crypto = "0.2.36"
-tokio = { version = "1", features = ["full"] }
 serde = "*"
 serde_json = "*"
 serde_derive = "*"
 json = "0.12.4"
-rusqlite = "0.28.0"
 chrono = "0.4.22"
 colored = "2.0.0"
+lazy_static = "1.4.0"

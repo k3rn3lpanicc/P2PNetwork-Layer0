@@ -3,38 +3,51 @@ use crypto::sha3::Sha3;
 use std::time;
 use crate::{logger::{Logger , LOGTYPE}, connections::{self, check_connections}};
 
-pub async fn hash_remover(){
+pub fn hash_remover(){
     loop{
+        check_connections();
+        
+        let number_of_cons = connections::get_connections_len();
+        let is_hardcode = connections::IS_HARDCODE.lock().unwrap().clone();
+        format!("IS Hardcoded ? {}", is_hardcode).log(LOGTYPE::INFO);
+        if  number_of_cons < 8 && !is_hardcode{
+            connections::send_connection_request();
+        }
+        drop(is_hardcode);
+        remove_hashes();
+        "Hash remover removed hashes that are more than 1 minute old".log(LOGTYPE::INFO); 
         std::thread::sleep(time::Duration::from_secs(10));
-        check_connections().await;
-        "Checked for connections to remove..".log(LOGTYPE::DEBUG);
-        let number_of_cons = connections::get_connections_len().await;
-        if  number_of_cons < 8{
-            connections::send_connection_request().await;
-        }
-        "Hash remover is removing hashes that are more than 1 minute old".log(LOGTYPE::INFO); 
-        let conn = connections::get_connection();
-        if let Err(err) =  conn.execute("DELETE FROM hashes WHERE date < ?", [format!("{}" , time::SystemTime::now().duration_since(time::UNIX_EPOCH).unwrap().as_secs())]){
-            format!("Error removing hashes : {}", err).log(LOGTYPE::ERROR);
-        }
     }
 }
+fn remove_hashes(){
+    let mut hashes = connections::MSG_HASHES.lock().unwrap();
+    let mut hashes_to_remove = Vec::new();
+    for (key , value) in hashes.iter(){
+        if value < &time::SystemTime::now().duration_since(time::UNIX_EPOCH).unwrap().as_secs(){
+            hashes_to_remove.push(key.clone());
+        }
+    }
+    for hash in hashes_to_remove{
+        hashes.remove(&hash);
+    }
+    drop(hashes);
+}
 pub fn does_hash_exist(hash : &str)->bool{
-    let conn = connections::get_connection();
-    let mut stmt = conn.prepare("SELECT * FROM hashes WHERE msg_hash = ?").unwrap();
-    let rows = stmt.query_map([hash] , |_row|{Ok(1)}).unwrap();
-    rows.count()>0
+    let hashes = connections::MSG_HASHES.lock().unwrap();
+    let res = hashes.contains_key(&hash.to_string());
+    drop(hashes);
+    res
 }
 pub fn add_msg_hash(hash: &str){
     let time = time::SystemTime::now().duration_since(time::UNIX_EPOCH).unwrap().as_secs();
-    let conn = connections::get_connection();
-    if conn.execute("insert into hashes (msg_hash , date) values (?1, ?2)",    [hash , format!("{}",time).as_str()]).is_ok(){
-        format!("Inserted Message hash : {}.." , &hash[0..16]).as_str().log(LOGTYPE::INFO);
-    }
-    else{
+    if does_hash_exist(hash){
         println!("Already exists");
+        return;
     }
-    conn.close().unwrap();
+    let mut hashes = connections::MSG_HASHES.lock().unwrap();
+    hashes.insert(hash.to_string() , time);
+    format!("Inserted Message hash : {}.." , &hash[0..16]).as_str().log(LOGTYPE::INFO);
+    drop(hashes);
 }
 
 

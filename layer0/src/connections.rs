@@ -1,13 +1,12 @@
-use std::time::Duration;
+use std::{time::Duration, error::Error, sync::{Arc, Mutex}, collections::HashMap, thread};
 use colored::Colorize;
-use tokio::net::TcpStream;
-
+use std::net::TcpStream;
 use crate::{logger::{LOGTYPE, Logger}, ppacket::PPacket, client};
+use std::process::Command;
 const CONNECTIONS_LEN :i32 = 8;
 const CONNECTION_TIME: u64 = 3;
 
 
-pub const APP_NUMBER : i64 = 5;
 
 #[derive(Clone)]
 pub struct Connection{
@@ -15,292 +14,246 @@ pub struct Connection{
     pub ip : String,
     pub port : i64,
 }
-pub struct Con{
-    id : i32,
-    ip : String,
-    port : String,
-}
 
-pub fn con_to_connection(con : &Con)->Connection{
-    Connection{
-        id : con.id.to_owned(),
-        ip : con.ip.to_string(),
-        port : con.port.to_owned().parse::<i64>().unwrap(),
-    }
-}
-pub fn create_database() {
-    "Creating Database ...".log(LOGTYPE::INFO);
-    match rusqlite::Connection::open(format!("hashes{}.db" , APP_NUMBER)){
-        Ok(con)=>{
-            if let Err(err) = con.execute(r##"CREATE TABLE "cons" (
-                "ind"	INTEGER NOT NULL UNIQUE,
-                "ip"	TEXT NOT NULL,
-                "port"	TEXT NOT NULL
-            , "state"	TEXT NOT NULL DEFAULT 'Connected')"##, []){
-                if err.to_string().contains("already exists"){
-                    "Table cons already exists".log(LOGTYPE::INFO);
-                }
-                else{
-                    format!("Error creating database : {}", err).log(LOGTYPE::ERROR);
-                }
-            }
-            if let Err(err) = con.execute(r##"CREATE TABLE "hashes" (
-                "msg_hash"	TEXT NOT NULL UNIQUE,
-                "date"	NUMERIC NOT NULL
-            )"##, []){
-                if err.to_string().contains("already exists"){
-                    "Table hashes already exists".log(LOGTYPE::INFO);
-                }
-                else{
-                    format!("Error creating database : {}", err).log(LOGTYPE::ERROR);
-                }
-            }
-            "Database Created".log(LOGTYPE::INFO);
-        },
-        Err(err)=>{
-            format!("Error creating database : {}", err).log(LOGTYPE::ERROR);
+impl Connection{
+    pub fn from_string(ipp : String) -> Connection{
+        // ipp is like ip:port so we have to split it based on :
+        let ip = ipp.split(":").collect::<Vec<&str>>()[0];
+        let port = ipp.split(":").collect::<Vec<&str>>()[1];
+        Connection{
+            id: 0,
+            ip: ip.to_string(),
+            port: port.parse::<i64>().unwrap(),
         }
     }
-    
 }
-pub fn get_connection()-> rusqlite::Connection{ 
-    match rusqlite::Connection::open(format!("hashes{}.db" , APP_NUMBER)){
-        Ok(con)=>{
-            return con;
-        },
-        Err(err)=>{
-            format!("Error creating database : {}", err).log(LOGTYPE::ERROR);
-            panic!("OKOKOKOK");
-        }
-    }
- }
 
-//pub async fn clean_server(){
-//    get_connection().execute("DELETE FROM cons", []).unwrap();    
-//}
 
-pub async fn add_connection(ip : &str, port : i64){
-    if get_connections_len().await == CONNECTIONS_LEN {
-        return;
+lazy_static!{
+    static ref CONS : Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new())); 
+    static ref PING_LIST : Arc<Mutex<HashMap<String,bool>>> = Arc::new(Mutex::new(HashMap::new())); // ip:port , bool
+    pub static ref MSG_HASHES : Arc<Mutex<HashMap<String,u64>>> = Arc::new(Mutex::new(HashMap::new())); // Key is the hash, value is the time of message
+    pub static ref PORT : Arc<Mutex<u64>> = Arc::new(Mutex::new(8080)); 
+    pub static ref HARDCODED_LIST : Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(vec![]));
+    pub static ref IS_HARDCODE : Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
+}
+
+
+pub fn add_connection(ip : &str, port : i64) -> Result<() , Box<dyn Error>>{
+    let mut con = CONS.lock()?;
+    if con.contains(&format!("{}:{}",ip,port).to_string()) {
+        return Err("Connection already exists!".into());
     }
-    let conn = get_connection();
-    let mut stmt = conn.prepare("SELECT * FROM cons WHERE ip = ? AND port = ?").unwrap();
-    let rows = stmt.query_map([ip , port.to_string().as_str()] , |_row|{Ok(1)}).unwrap();
-    if rows.count() == 0{
-        if let Err(err) = conn.execute("INSERT INTO cons (ind , ip , port) VALUES (? , ? , ?)", [get_next_index().to_owned().to_string().as_str(), ip , port.to_string().as_str()]){
-            format!("Error adding connection : {}", err).log(LOGTYPE::ERROR);
-        }
+    let count = con.len();
+    if count as i32 == CONNECTIONS_LEN{
+        drop(con);
+        return Err("Connections are full!".into());
     }
-    else{
-        format!("Connection {} : {} already exists" , ip , port).log(LOGTYPE::ERROR);
-    }
+    let value = format!("{}:{}",ip,port); 
+    con.push(value);
+    drop(con);
+    Ok(())
 }
 
 
 
-pub async fn get_connections() -> Vec<Connection>{
-    let conn = get_connection();
-    let mut stmt = conn.prepare("SELECT * FROM cons").unwrap();
-    let rows = stmt.query_map([], |row|{
-        Ok(Con{
-            id : row.get(0).unwrap(),
-            ip : row.get(1).unwrap(),
-            port : row.get(2).unwrap(),
-        })
-    }).unwrap();
-    let mut cons = Vec::new();
-    for row in rows{
-        cons.push(con_to_connection(&row.unwrap()));
+pub fn get_connections() -> Vec<Connection>{
+    let con = CONS.lock().unwrap();
+    let mut cons : Vec<Connection> = Vec::new();
+    let mut cnt = 0;
+    for ipp in con.iter(){
+        let ip = ipp.split(":").collect::<Vec<&str>>()[0];
+        let port = ipp.split(":").collect::<Vec<&str>>()[1];
+        cons.push(Connection{
+            id : cnt,
+            ip : ip.to_string(),
+            port : port.parse::<i64>().unwrap(),
+        });
+        cnt += 1;
     }
+    drop(con);
     cons
 }
+
 pub fn change_state(con : &Connection , state : &str)->bool{
-    if get_connection().execute("UPDATE cons set state = ? where ind = ?", [state , con.id.to_owned().to_string().as_str()]).is_ok(){
+    let mut ping_list = PING_LIST.lock().unwrap();
+    let key = format!("{}:{}",con.ip,con.port);
+    if state == "ping"{
+        if !ping_list.contains_key(&key){
+            ping_list.insert(key,true);
+            drop(ping_list);
+            return true;
+        }
+    }else if state == "pong"{
+        ping_list.remove(key.as_str());
+        drop(ping_list);
         return true;
     }
+    drop(ping_list);
     false
 }
 pub fn get_state(con : &Connection)->String{
-    let conn = get_connection();
-    let mut stmt = conn.prepare("SELECT state FROM cons WHERE ind = ?").unwrap();
-    let rows = stmt.query_map([con.id.to_owned().to_string().as_str()] , |row|{
-        Ok(row.get(0).unwrap())
-    }).unwrap();
-    for row in rows{
-        return row.unwrap();
+    let ping_list = PING_LIST.lock().unwrap();
+    let key = format!("{}:{}",con.ip,con.port);
+    if ping_list.contains_key(&key){
+        drop(ping_list);
+        "Ping".to_string()
+    }else{
+        drop(ping_list);
+        "Pong".to_string()
     }
-    String::from("None")
 }
 pub fn get_connection_with_add(ip : &str , port : i64) -> Connection{
-    let con = get_connection();
-    let mut stmt = con.prepare("SELECT * FROM cons WHERE ip = ? AND port = ?").unwrap();
-    let rows = stmt.query_map([ip , port.to_string().as_str()] , |row|{
-        Ok(Con{
-            id : row.get(0).unwrap(),
-            ip : row.get(1).unwrap(),
-            port : row.get(2).unwrap(),
-        })
-    }).unwrap();
-    for row in rows{
-        return con_to_connection(&row.unwrap());
-    }
+    let cons = CONS.lock().unwrap();
+    let mut cnt = 0; 
+    for ipp in cons.iter(){
+        let ip_ = ipp.split(":").collect::<Vec<&str>>()[0];
+        let port_ = ipp.split(":").collect::<Vec<&str>>()[1];
+        if ip_ == ip && port_ == port.to_string().as_str(){
+            drop(cons);
+            return Connection{
+                id : cnt,
+                ip : ip.to_string(),
+                port : port,
+            }
+        }
+        cnt += 1;
+    }   
+    drop(cons);
     return Connection{
         id : -1,
-        ip : "".to_string(),
-        port : 0,
-    }
+        ip : ip.to_string(),
+        port : port,
+    }; 
 }
-pub async fn send_ping(con : &Connection) -> bool{
-    if let Ok(stream) = tokio::time::timeout(Duration::from_secs(1) , TcpStream::connect(format!("{}:{}" , con.ip , con.port))).await{
-        if let Ok(_s) = tokio::time::timeout(Duration::from_secs(1), client::send_ppacket(&mut stream.unwrap(), &PPacket::ping())).await{
-            if change_state(con, "Ping"){
-                format!("Sent Ping to {}:{} ... Waiting for Response (2secs)", con.id,con.port).log(LOGTYPE::INFO);
-                tokio::time::sleep(Duration::from_secs(2)).await;
-                let state = get_state(con);
-                if state == "Pong"{
-                    format!("Ping to {}:{} was successful", con.id,con.port).log(LOGTYPE::INFO);
-                    return true;
-                }
-                else{
-                    format!("Ping to {}:{} timed out", con.id,con.port).log(LOGTYPE::INFO);
-                    return false;
-                }
-            }
-            "Couldn't Change DB for Pinging!".log(LOGTYPE::ERROR);
-            return false;
+pub fn send_ping(con : &Connection) -> Result<bool , Box<dyn Error>>{
+    let mut stream = TcpStream::connect(format!("{}:{}" , con.ip , con.port))?; //add timeout to this line todo
+    let _s = client::send_ppacket(&mut stream, &PPacket::ping())?; //add timeout to this line todo
+    if change_state(con, "Ping"){
+        format!("Sent Ping to {}:{} ... Waiting for Response (2secs)", con.id,con.port).log(LOGTYPE::INFO);
+        std::thread::sleep(Duration::from_secs(2));
+        
+        let state = get_state(con);
+        if state == "Pong"{
+            format!("Ping to {}:{} was successful", con.id,con.port).log(LOGTYPE::INFO);
+            return Ok(true);
         }
-        println!("Couldn't Connect to {}:{}" , con.ip , con.port);
-        false
+        else{
+            format!("Ping to {}:{} timed out", con.id,con.port).log(LOGTYPE::INFO);
+            return Ok(false);
+        }
     }
-    else{
-        format!("Couldn't Connect to {}:{} -> Timeout" , con.ip , con.port).log(LOGTYPE::ERROR);
-        false
-    }
+    //"Couldn't Change DB for Pinging!".log(LOGTYPE::ERROR);
+    return Ok(true);
 }
 
-pub async fn check_connections(){
-    let connections = get_connections().await;
+pub fn check_connections(){
+    let connections = get_connections();
     if connections.len()==0{
         return;
     }
     for con in connections{
-        tokio::spawn(async move {
-            format!("Sending Ping to ->> {}:{}" , con.ip.to_string().green() , con.port.to_string().green()).log(LOGTYPE::INFO);
-            if !send_ping(&con).await{
-                remove_connection(con.id , &con.ip , con.port).await;
+        format!("Sending Ping to ->> {}:{}" , con.ip.to_string().green() , con.port.to_string().green()).log(LOGTYPE::INFO);
+       // let res = send_ping(&con).await.un;
+        match send_ping(&con){
+            Ok(b)=>{
+                if b{
+                    format!("Ping to {}:{} was successful", con.id,con.port).magenta().to_string().log(LOGTYPE::INFO);
+                }
+                else{
+                    format!("Ping to {}:{} timed out", con.id,con.port).log(LOGTYPE::INFO);
+                    remove_connection(&con.ip , con.port);
+                }
+                
+            },
+            Err(k) => {
+                format!("Couldn't Ping {}:{}" , con.ip.to_string().red() , con.port.to_string().red()).log(LOGTYPE::ERROR);
+                remove_connection(&con.ip , con.port);
             }
-            else{
-                println!("{}:{} is online" , con.ip , con.port);
-            }
-        });
+        }
     }
 }
 
-pub async fn send_connection_request() {
-    let connections = get_connections().await;
-    if get_connections_len().await != 0 {
+
+pub fn send_connection_request() {
+    let port = PORT.lock().unwrap().clone();
+    let connections = get_connections();
+    let packet : PPacket = PPacket::con_req("127.0.0.1", port as i64);
+    if get_connections_len() != 0 {
         "Sending Connection Request to all Connections".log(LOGTYPE::INFO);
-        let packet : PPacket = PPacket::from_str(1, format!("{{ \"ip\": \"{}\" , \"port\": \"{}\"}}" , "192.168.1.1" , "23").as_str());
         for con in connections{
             format!("Sending Connection ReQ to {}:{}" , con.ip , con.port).log(LOGTYPE::INFO);
-            send_message(&packet, &con).await;
+            send_message(&packet, &con);
         }
     }
     else{
+        let hardcoded_list = HARDCODED_LIST.lock().unwrap().clone();
+        for con in hardcoded_list{
+            format!("Sending Connection ReQ to {}" , con).log(LOGTYPE::INFO);
+            send_message(&packet, &Connection::from_string(con));
+        }
         //todo : Send to hardcoded server
     }
 }
 
-pub async fn is_connections_full()->bool {
-    get_connections_len().await == CONNECTIONS_LEN
+pub fn is_connections_full()->bool {
+    get_connections_len() == CONNECTIONS_LEN
 }
 
-pub async fn get_nth_connection(n : i32) -> Connection{
-    let conn = get_connection();
-    let mut stmt = conn.prepare("SELECT * FROM cons WHERE ind = ?").unwrap();
-    let rows = stmt.query_map([n], |row|{
-        Ok(Con{
-            id : row.get(0).unwrap(),
-            ip : row.get(1).unwrap(),
-            port : row.get(2).unwrap(),
-        })
-    }).unwrap();
-    let mut cons = Vec::new();
-    for row in rows{
-        cons.push(row.unwrap());
-    }
-    return con_to_connection(cons.get(n as usize).unwrap());
+pub fn get_nth_connection(n : i32) -> Connection{
+    let cons = CONS.lock().unwrap();
+    let con = cons.iter().nth(n as usize).unwrap();
+    let ip = con.split(":").collect::<Vec<&str>>()[0];
+    let port = con.split(":").collect::<Vec<&str>>()[1];
+    let conn = Connection{
+        id : n,
+        ip : ip.to_string(),
+        port : port.parse::<i64>().unwrap(),
+    };
+    drop(cons);
+    conn
 }
 
 
-pub async fn remove_connection(id : i32 , ip : &str , port : i64){
-    let conn = get_connection();
-    conn.execute("DELETE FROM cons WHERE ind = ?", [id.to_string()]).unwrap();
-    format!("Connection Removed ->> {}:{}" , ip.to_string().yellow() , port.to_string().yellow()).log(LOGTYPE::ERROR);
-}
-
-
-
-pub async fn get_connections_len() -> i32{
-    let conn = get_connection();
-    let mut stmt = conn.prepare("SELECT * FROM cons").unwrap();
-    let rows = stmt.query_map([], |row|{
-        Ok(Con{
-            id : row.get(0).unwrap(),
-            ip : row.get(1).unwrap(),
-            port : row.get(2).unwrap(),
-        })
-    }).unwrap();
-    let mut cons = Vec::new();
-    for row in rows{
-        cons.push(row.unwrap());
-    }
-    cons.len() as i32
-}
-
-
-
-pub fn get_next_index() -> i32{
-    let conn = get_connection();
-    let mut stmt = conn.prepare("SELECT * FROM cons order by ind").unwrap();
-    let rows = stmt.query_map([], |row|{
-        Ok(Con{
-            id : row.get(0).unwrap(),
-            ip : row.get(1).unwrap(),
-            port : row.get(2).unwrap(),
-        })
-    }).unwrap();
-    let mut cons = Vec::new();
-    for row in rows{
-        cons.push(row.unwrap());
-    }
-    for i in 0..cons.len(){
-        if cons.get(i).unwrap().id!=(i+1) as i32{
-            return (i+1) as i32;
+pub fn remove_connection(ip : &str , port : i64){
+    let mut cons = CONS.lock().unwrap();
+    let mut cnt = 0;
+    for ipp in cons.iter(){
+        if ipp == format!("{}:{}" , ip , port).as_str(){
+            cons.remove(cnt);
+            break;
         }
+        cnt += 1;
     }
-    (cons.len()+1) as i32
+    drop(cons);
 }
 
+pub fn get_connections_len() -> i32{
+    let cons = CONS.lock().unwrap();
+    let len = cons.len() as i32;
+    drop(cons);
+    len
+}
 
-pub async fn send_message(packet : &PPacket , connection : &Connection ){
-    let mut stream : TcpStream;
-    if let Ok(sr) = tokio::time::timeout(Duration::from_secs(CONNECTION_TIME),tokio::net::TcpStream::connect(format!("{}:{}" , connection.ip , connection.port))).await{
-        stream = sr.unwrap();
-    }
-    else{
-        "Connection timed out".log(LOGTYPE::ERROR);
-        remove_connection(connection.id,&connection.ip , connection.port).await;
-        return;
-    }    
-    println!("Sending message");
-    if let Ok(res) = client::send_ppacket(&mut stream, packet).await{
-        if !res{
-            remove_connection(connection.id,&connection.ip , connection.port).await;
+pub fn send_message(packet : &PPacket , connection : &Connection ){
+    if let Ok(mut stream) = TcpStream::connect(format!("{}:{}" , connection.ip , connection.port)){
+        if let Ok(res) = client::send_ppacket(&mut stream, packet){
+            if !res{
+                remove_connection(&connection.ip , connection.port);
+            }
+        }
+        else{
+            remove_connection(&connection.ip,connection.port);   
         }
     }
     else{
-        remove_connection(connection.id,&connection.ip,connection.port).await;   
+        format!("Couldn't Connect to {}:{}" , connection.ip , connection.port).as_str().log(LOGTYPE::ERROR);
+        remove_connection(&connection.ip,connection.port);
     }
 }
 
+pub fn get_my_ip() -> String{
+    let output = Command::new("curl").arg("ifconfig.me").output().unwrap();
+    let ip = String::from_utf8(output.stdout).unwrap();
+    ip
+}
