@@ -1,4 +1,4 @@
-use crate::hashing;
+use crate::{hashing, jsonize::{self, Jsonize}};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PPacket{
@@ -52,6 +52,24 @@ impl PPacket{
     }
     pub fn con_req(my_ip : &str , my_port : i64)->PPacket{
         PPacket::new(1, format!("{{\"ip\":\"{}\",\"port\":\"{}\"}}" , my_ip , my_port).as_bytes())
+    }
+    pub fn con_ques()->PPacket{
+        PPacket::new(3, b"")
+    }
+    pub fn con_ans(ans : bool)->PPacket{
+        PPacket::new(4, format!("{{\"res\":\"{}\"}}" , ans).as_bytes())
+    }
+    pub fn get_ans(&self) -> bool{
+        let json = String::from_utf8(self.payload.clone()).unwrap();
+        let json = jsonize::from_str(&json);
+        let res = json.get_key("res").as_bool().unwrap();
+        res
+    }
+    pub fn is_con_ans(&self)->bool{
+        self.command == 4
+    }
+    pub fn is_con_ques(&self)->bool{
+        self.command == 3
     }
     pub fn is_ping(&self)->bool{
         self.command == 2 && self.payload == b"Ping"

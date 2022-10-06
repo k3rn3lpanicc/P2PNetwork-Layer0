@@ -1,11 +1,12 @@
 use std::{time::Duration, error::Error, sync::{Arc, Mutex}, collections::HashMap, thread};
 use colored::Colorize;
 use std::net::TcpStream;
-use crate::{logger::{LOGTYPE, Logger}, ppacket::PPacket, client::{self, show_connections}};
+use crate::{logger::{LOGTYPE, Logger}, ppacket::PPacket, client::{self, show_connections}, wlist::Wlist};
+
 use std::process::Command;
 const CONNECTIONS_LEN :i32 = 8;
 const CONNECTION_TIME: u64 = 3;
-
+const WAITING_LIST_LEN : usize = 10;
 
 
 #[derive(Clone)]
@@ -36,6 +37,7 @@ lazy_static!{
     pub static ref PORT : Arc<Mutex<u64>> = Arc::new(Mutex::new(8080)); 
     pub static ref HARDCODED_LIST : Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(vec![]));
     pub static ref IS_HARDCODE : Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
+    pub static ref WAITING_LIST : Arc<Mutex<Wlist>> = Arc::new(Mutex::new(Wlist::new(WAITING_LIST_LEN)));
 }
 
 
@@ -193,7 +195,7 @@ pub fn send_connection_request() {
 }
 
 pub fn is_connections_full()->bool {
-    get_connections_len() == CONNECTIONS_LEN
+    get_connections_len() >= CONNECTIONS_LEN
 }
 
 pub fn get_nth_connection(n : i32) -> Connection{

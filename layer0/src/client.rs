@@ -16,8 +16,7 @@ use crate::ppacket::{PPacket, from_byte_vec};
 pub fn save_hash_to_file(file_name : &str){
     let mut file = fs::File::create(file_name).unwrap();
     let hash = crate::hashing::get_hash_str("Hello World"); 
-    file.write_all(hash.as_bytes());
-
+    file.write_all(hash.as_bytes()).unwrap();
 }
 
 pub fn send_ppacket(stream : &mut TcpStream, packet : &PPacket) -> Result<bool , &'static str>{
@@ -35,7 +34,6 @@ pub fn read_ppacket(stream : &mut TcpStream)->Result<PPacket,&'static str>{
         message.extend_from_slice(&buf[0..readed]);
         if readed < 1024{
             break;
-            
         }
     }
     if message.is_empty() {
@@ -58,16 +56,62 @@ pub fn show_connections(){
 }
 
 fn handle_connection_request(packet : PPacket) {
+    /*
+        N will be 10 at first
+
+        Waiting list : It's fix sized (DONE)
+            new connection requests will be entered from left, and will be removed from right(when it reaches more than N requests). also we read them from right to left(most old item will be read first) 
+        
+        fn spread : send the connection request (first to the waiting list and then our neighbour nodes (except the incoming node))
+        
+        does our node need more connections? 
+            -yes : (1)
+                does the node still want a connection ? (Send a question packet to the node to determine if it still wants to connect)
+                    -yes  : (3)
+                        connect to the node
+                        spread();
+                    -no  : (4)
+                        do nothing (stop process)
+            -no  : (2)
+                add it to the waiting list
+                spread();
+                end process
+        
+        
+        TODO : Implement a Waiting list(Done), Make a connection check mechanism (to see if they still have place for new connections),DDOS Attack Scenarios
+    */
+
     let payload = std::str::from_utf8(&packet.payload).unwrap();
     let json = jsonize::from_str(payload);
-    if json.has_key("ip"){
-
-        //sending request to neighbour nodes (in a new thread)                               
+    if json.has_key("ip") && json.has_key("port"){
         thread::spawn(move || {
             let ip = json.get_key("ip");
             let port = json.get_key("port");
             let ipp = ip.as_str().unwrap(); 
             
+            if !connections::is_connections_full(){//(1)
+                let mut stream = TcpStream::connect(format!("{}:{}",ipp,port.as_str().unwrap())).unwrap();
+                let packet = PPacket::con_ques();
+                send_ppacket(&mut stream, &packet).unwrap();
+                let result = read_ppacket(&mut stream).unwrap();
+                if result.is_con_ans(){
+                    if result.get_ans(){ //(3)
+                        
+                    }
+                    else{ //(4)
+                        return;
+                    }
+                }
+                else{
+                    //result is not a connection answer
+                }
+            }
+            else{//(2)
+
+
+            }
+            
+
             let cons = connections::get_connections();
             for k in cons{
                 match TcpStream::connect(format!("{}:{}",k.ip,k.port)){
@@ -98,6 +142,9 @@ fn handle_connection_request(packet : PPacket) {
             }
         });   
     }
+    else{
+        //PPacket is not valid (it has code 1 but it doesn't have ip and port)
+    }
 
 }
 
@@ -116,8 +163,6 @@ fn handle_ping_pong(packet : PPacket , stream : &mut TcpStream){
 
 
 pub fn handle_client(stream : &mut TcpStream , mode : &'static str){
-    //!!!todo : add a ping-pong mechanism to handle the incoming packet just inside this function!!!
-    //todo : if user didn't send a ppacket in a amount of time, close the connection
     loop{
         show_connections();
         match read_ppacket(stream){
@@ -133,24 +178,29 @@ pub fn handle_client(stream : &mut TcpStream , mode : &'static str){
                             2 => {
                                 handle_ping_pong(packet,stream);
                             },
+                            3 => { 
+                                
+                            },
+                            4 => {
+
+                            },
                             _ => {
                                 println!("Command not found!");
                             }
                         }
-                        break;
                     }
                     else {
-                        logger::log("Message Hash already in database" , logger::LOGTYPE::MORE_INFO);
+                        logger::log("Message Hash already in database" , logger::LOGTYPE::MORE_INFO); //penalty
                     }
                 }
                 else{
-                    logger::log("Invalid packet!", logger::LOGTYPE::ERROR);
+                    logger::log("Invalid packet!", logger::LOGTYPE::ERROR); //penalty
                 }
             },
             Err(err) =>{
-                if err == "Connection Closed!"{
-                    break;
-                }
+                // if err == "Connection Closed!"{
+                //     break;
+                // }
                 format!("Disconnected : {}" , err.bright_yellow()).log(LOGTYPE::ERROR);
                 break;
             }
