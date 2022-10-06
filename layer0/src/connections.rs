@@ -8,6 +8,8 @@ const CONNECTIONS_LEN :i32 = 8;
 const CONNECTION_TIME: u64 = 3;
 const WAITING_LIST_LEN : usize = 10;
 
+// address : ip:port -> TcpStream
+
 
 #[derive(Clone)]
 pub struct Connection{
@@ -38,6 +40,7 @@ lazy_static!{
     pub static ref HARDCODED_LIST : Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(vec![]));
     pub static ref IS_HARDCODE : Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
     pub static ref WAITING_LIST : Arc<Mutex<Wlist>> = Arc::new(Mutex::new(Wlist::new(WAITING_LIST_LEN)));
+    pub static ref TCP_CONS : Arc<Mutex<HashMap<String,TcpStream>>> = Arc::new(Mutex::new(HashMap::new()));
 }
 
 

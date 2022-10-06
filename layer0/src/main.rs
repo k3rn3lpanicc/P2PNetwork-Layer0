@@ -110,7 +110,7 @@ fn server_handle(mode :  &'static str , port_number : u16) -> Result<() , Box<dy
     
         format!("New connection from {}", _address.to_string().bright_magenta()).log(LOGTYPE::INFO);
         thread::spawn(move || {
-            client::handle_client(&mut stream , mode);
+            client::handle_client(stream , mode);
         });
         
     }

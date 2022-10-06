@@ -90,7 +90,8 @@ fn handle_connection_request(packet : PPacket) {
             let ipp = ip.as_str().unwrap(); 
             
             if !connections::is_connections_full(){//(1)
-                let mut stream = TcpStream::connect(format!("{}:{}",ipp,port.as_str().unwrap())).unwrap();
+
+                let mut stream = TcpStream::connect(format!("{}:{}",ipp,port.as_str().unwrap())).unwrap(); //mistake : we should get it from the list
                 let packet = PPacket::con_ques();
                 send_ppacket(&mut stream, &packet).unwrap();
                 let result = read_ppacket(&mut stream).unwrap();
@@ -162,7 +163,14 @@ fn handle_ping_pong(packet : PPacket , stream : &mut TcpStream){
 }
 
 
-pub fn handle_client(stream : &mut TcpStream , mode : &'static str){
+pub fn handle_client(mut streams : TcpStream , _mode : &'static str){
+    /*
+    *   we should be able to send connection requests to other nodes without connecting *
+    *   to them over and over again (with one tcpconnection), so we should keep         *
+    *   connections open and also access them from different threads. But How?          *
+    */
+    
+    let stream =  &mut streams;
     loop{
         show_connections();
         match read_ppacket(stream){
