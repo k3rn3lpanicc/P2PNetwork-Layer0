@@ -10,9 +10,9 @@ pub enum LOGTYPE {
 }
 
 pub fn log(message : &str , log_type : LOGTYPE){
-    if log_type==LOGTYPE::MORE_INFO{
-        return;
-    }
+    //if log_type==LOGTYPE::MORE_INFO{
+    //    return;
+    //}
 
     let time = chrono::Local::now();
     //%Y-%m-%d %H:%M:%S

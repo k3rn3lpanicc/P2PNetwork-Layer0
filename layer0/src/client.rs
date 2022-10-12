@@ -58,7 +58,6 @@ pub fn show_connections(){
 fn handle_connection_request(packet : PPacket) {
     /*
         N will be 10 at first
-
         Waiting list : It's fix sized (DONE)
             new connection requests will be entered from left, and will be removed from right(when it reaches more than N requests). also we read them from right to left(most old item will be read first) 
         
