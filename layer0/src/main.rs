@@ -5,7 +5,10 @@ mod jsonize;
 mod connections;
 mod hardcoded;
 mod wlist;
-use ppacket::PPacket;
+use client::{read_ppacket, send_ppacket};
+use connections::send_message;
+use ppacket::{PPacket, from_byte_vec};
+use std::io::Read;
 use std::thread;
 use std::net::{TcpListener , TcpStream};
 #[macro_use]
@@ -101,18 +104,36 @@ fn server_handle(mode :  &'static str , port_number : u16) -> Result<() , Box<dy
     
     let listener = TcpListener::bind(address)?;
     format!("Listening on Server side : {}:{}" , "0.0.0.0".bright_red().underline() , port_number.to_string().bright_red().underline()).log(LOGTYPE::INFO);
+    // spawn the hash_remover and connection checker thread
     thread::spawn(move || {
         hashing::hash_remover();
     });
+    
     loop{
         //"Waiting for connection..".bright_red().to_string().log(LOGTYPE::INFO);
         let (mut stream , _address) = listener.accept()?;
-    
-        format!("New connection from {}", _address.to_string().bright_magenta()).log(LOGTYPE::INFO);
-        thread::spawn(move || {
-            client::handle_client(stream , mode);
-        });
-        
+        //con_req , con_ques , con_ans
+        let initial_packet = read_ppacket(&mut stream)?;
+        if initial_packet.is_con_ques(){
+            format!("Connection Question from {}", _address.to_string().bright_magenta()).log(LOGTYPE::INFO); 
+            send_ppacket(&mut stream, &PPacket::con_ans(!connections::is_connections_full()))?;
+        }
+        else if initial_packet.is_con_req(){
+            format!("Connection Request from {}", _address.to_string().bright_magenta()).log(LOGTYPE::INFO); 
+            //this part can be sended to client application for more control ?! dunno
+            if !connections::is_connections_full(){
+                let client_name = format!("{}:{}" , stream.peer_addr()?.ip() , stream.peer_addr()?.port());
+                let mut cons = connections::TCP_CONS.lock()?;
+                cons.insert(client_name.clone(), stream);
+                format!("New connection from {}", _address.to_string().bright_magenta()).log(LOGTYPE::INFO); 
+                thread::spawn(move || {
+                    client::handle_client(client_name.as_str() , mode);
+                });
+            }
+        }
+        else{
+            //it didn't started with connection request or question!
+        }
     }
 }
 

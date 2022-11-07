@@ -22,11 +22,11 @@ pub fn save_hash_to_file(file_name : &str){
 pub fn send_ppacket(stream : &mut TcpStream, packet : &PPacket) -> Result<bool , &'static str>{
     let message = packet.to_byte_vec();
     if stream.write_all(&message).is_ok(){
-        return   Ok(true);
+        return Ok(true);
     }
     Err("Connection closed!")
 }
-pub fn read_ppacket(stream : &mut TcpStream)->Result<PPacket,&'static str>{
+pub fn read_ppacket(stream : &mut TcpStream)-> Result<PPacket,&'static str>{
     let mut message = vec![];
     let mut buf = [0; 1024];
     loop{
@@ -162,15 +162,15 @@ fn handle_ping_pong(packet : PPacket , stream : &mut TcpStream){
 }
 
 
-pub fn handle_client(mut streams : TcpStream , _mode : &'static str){
+pub fn handle_client(client_id : &str , _mode : &'static str){
     /*
     *   we should be able to send connection requests to other nodes without connecting *
     *   to them over and over again (with one tcpconnection), so we should keep         *
     *   connections open and also access them from different threads. But How?          *
     */
-    
-    let stream =  &mut streams;
     loop{
+        let mut cons = connections::TCP_CONS.lock().unwrap();
+        let stream =  cons.get_mut(client_id).unwrap();
         show_connections();
         match read_ppacket(stream){
             Ok(packet) => {
@@ -212,6 +212,8 @@ pub fn handle_client(mut streams : TcpStream , _mode : &'static str){
                 break;
             }
         }
+        drop(stream);
+        drop(cons);
     }
 }
 

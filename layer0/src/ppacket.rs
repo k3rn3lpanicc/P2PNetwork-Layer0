@@ -53,6 +53,15 @@ impl PPacket{
     pub fn con_req(my_ip : &str , my_port : i64)->PPacket{
         PPacket::new(1, format!("{{\"ip\":\"{}\",\"port\":\"{}\"}}" , my_ip , my_port).as_bytes())
     }
+    pub fn req_ans(answer : bool) -> PPacket{
+        PPacket::new(5, format!("{{\"ans\":\"{}\"}}" , answer).as_bytes())
+    }
+    pub fn is_req_ans(&self) -> bool {
+        return self.command == 5;
+    }
+    pub fn is_con_req(&self) ->bool{
+        return self.command == 1;
+    }
     pub fn con_ques()->PPacket{
         PPacket::new(3, b"")
     }
