@@ -1,6 +1,6 @@
 use colored::Colorize;
 
-#[derive(PartialEq)]
+#[derive(PartialEq,Eq)]
 pub enum LOGTYPE {
     MORE_INFO,
     INFO,

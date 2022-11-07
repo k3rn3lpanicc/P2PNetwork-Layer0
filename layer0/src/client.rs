@@ -44,8 +44,7 @@ pub fn read_ppacket(stream : &mut TcpStream)-> Result<PPacket,&'static str>{
 
 pub fn show_connections(){
     if connections::get_connections_len()!=0{
-        let mut to_show : String = String::new();
-        to_show = "Connections : ".bright_white().to_string()+"\n";
+        let mut to_show  = "Connections : ".bright_white().to_string()+"\n";
         let cons = connections::get_connections();
         for k in cons{
             to_show += format!("\t\t\t\t\t\t\t|{}:{}|" , k.ip.bright_green() , k.port.to_string().bright_magenta()).as_str();
@@ -116,7 +115,7 @@ fn handle_connection_request(packet : PPacket) {
             for k in cons{
                 match TcpStream::connect(format!("{}:{}",k.ip,k.port)){
                     Ok(mut stream) => {
-                        let packets = PPacket::new(1, &json.to_string().as_bytes());
+                        let packets = PPacket::new(1, json.to_string().as_bytes());
                         if send_ppacket(&mut stream, &packets).is_ok(){
                             hashing::add_msg_hash(&packets.overall_checksum());
                             format!("Bounced connection request to {}:{}" , k.ip , k.port).bright_yellow().to_string().log(LOGTYPE::INFO);
@@ -132,7 +131,7 @@ fn handle_connection_request(packet : PPacket) {
             
             
             if let Err(err) = connections::add_connection(ipp, port.to_string().parse::<i64>().unwrap()){
-                if format!("{}" , err).to_string() != "Connection already exists!".to_string(){
+                if format!("{}" , err) != "Connection already exists!"{
                     logger::log(format!("Error while adding connection : {}" , err).as_str(), logger::LOGTYPE::ERROR);
                 }
             }
@@ -212,7 +211,6 @@ pub fn handle_client(client_id : &str , _mode : &'static str){
                 break;
             }
         }
-        drop(stream);
         drop(cons);
     }
 }

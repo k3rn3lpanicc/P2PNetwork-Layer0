@@ -11,7 +11,6 @@ pub fn hash_remover(){
         if  number_of_cons < 8 && !is_hardcode{
             connections::send_connection_request();
         }
-        drop(is_hardcode);
         remove_hashes();
         "Hash remover removed hashes that are more than 1 minute old".log(LOGTYPE::MORE_INFO); 
         std::thread::sleep(time::Duration::from_secs(10));

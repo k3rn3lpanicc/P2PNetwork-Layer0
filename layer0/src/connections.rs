@@ -1,11 +1,11 @@
-use std::{time::Duration, error::Error, sync::{Arc, Mutex}, collections::HashMap, thread};
+use std::{time::Duration, error::Error, sync::{Arc, Mutex}, collections::HashMap};
 use colored::Colorize;
 use std::net::TcpStream;
 use crate::{logger::{LOGTYPE, Logger}, ppacket::PPacket, client::{self, show_connections}, wlist::Wlist};
 
 use std::process::Command;
 const CONNECTIONS_LEN :i32 = 8;
-const CONNECTION_TIME: u64 = 3;
+const _CONNECTION_TIME: u64 = 3;
 const WAITING_LIST_LEN : usize = 10;
 
 // address : ip:port -> TcpStream
@@ -21,8 +21,8 @@ pub struct Connection{
 impl Connection{
     pub fn from_string(ipp : String) -> Connection{
         // ipp is like ip:port so we have to split it based on :
-        let ip = ipp.split(":").collect::<Vec<&str>>()[0];
-        let port = ipp.split(":").collect::<Vec<&str>>()[1];
+        let ip = ipp.split(':').collect::<Vec<&str>>()[0];
+        let port = ipp.split(':').collect::<Vec<&str>>()[1];
         Connection{
             id: 0,
             ip: ip.to_string(),
@@ -46,7 +46,7 @@ lazy_static!{
 
 pub fn add_connection(ip : &str, port : i64) -> Result<() , Box<dyn Error>>{
     let mut con = CONS.lock()?;
-    if con.contains(&format!("{}:{}",ip,port).to_string()) {
+    if con.contains(&format!("{}:{}",ip,port)) {
         return Err("Connection already exists!".into());
     }
     let count = con.len();
@@ -65,16 +65,14 @@ pub fn add_connection(ip : &str, port : i64) -> Result<() , Box<dyn Error>>{
 pub fn get_connections() -> Vec<Connection>{
     let con = CONS.lock().unwrap();
     let mut cons : Vec<Connection> = Vec::new();
-    let mut cnt = 0;
-    for ipp in con.iter(){
-        let ip = ipp.split(":").collect::<Vec<&str>>()[0];
-        let port = ipp.split(":").collect::<Vec<&str>>()[1];
+    for (cnt , ipp) in con.iter().enumerate(){
+        let ip = ipp.split(':').collect::<Vec<&str>>()[0];
+        let port = ipp.split(':').collect::<Vec<&str>>()[1];
         cons.push(Connection{
-            id : cnt,
+            id : cnt as i32,
             ip : ip.to_string(),
             port : port.parse::<i64>().unwrap(),
         });
-        cnt += 1;
     }
     drop(con);
     cons
@@ -110,26 +108,24 @@ pub fn get_state(con : &Connection)->String{
 }
 pub fn get_connection_with_add(ip : &str , port : i64) -> Connection{
     let cons = CONS.lock().unwrap();
-    let mut cnt = 0; 
-    for ipp in cons.iter(){
-        let ip_ = ipp.split(":").collect::<Vec<&str>>()[0];
-        let port_ = ipp.split(":").collect::<Vec<&str>>()[1];
+    for (cnt,ipp) in cons.iter().enumerate(){
+        let ip_ = ipp.split(':').collect::<Vec<&str>>()[0];
+        let port_ = ipp.split(':').collect::<Vec<&str>>()[1];
         if ip_ == ip && port_ == port.to_string().as_str(){
             drop(cons);
             return Connection{
-                id : cnt,
+                id : cnt as i32,
                 ip : ip.to_string(),
-                port : port,
+                port,
             }
         }
-        cnt += 1;
     }   
     drop(cons);
-    return Connection{
+    Connection{
         id : -1,
         ip : ip.to_string(),
-        port : port,
-    }; 
+        port,
+    }
 }
 pub fn send_ping(con : &Connection) -> Result<bool , Box<dyn Error>>{
     let mut stream = TcpStream::connect(format!("{}:{}" , con.ip , con.port))?; //add timeout to this line todo
@@ -144,12 +140,12 @@ pub fn send_ping(con : &Connection) -> Result<bool , Box<dyn Error>>{
             return Ok(false);
         }
     }
-    return Ok(true);
+    Ok(true)
 }
 
 pub fn check_connections(){
     let connections = get_connections();
-    if connections.len()==0{
+    if connections.is_empty(){
         return;
     }
     for con in connections{
@@ -166,7 +162,7 @@ pub fn check_connections(){
                 }
                 
             },
-            Err(k) => {
+            Err(_k) => {
                 format!("Couldn't Ping {}:{}" , con.ip.to_string().red() , con.port.to_string().red()).log(LOGTYPE::ERROR);
                 remove_connection(&con.ip , con.port);
                 show_connections();
@@ -177,7 +173,7 @@ pub fn check_connections(){
 
 
 pub fn send_connection_request() {
-    let port = PORT.lock().unwrap().clone();
+    let port : u64 = *PORT.lock().unwrap();
     let connections = get_connections();
     let packet : PPacket = PPacket::con_req("127.0.0.1", port as i64);
     if get_connections_len() != 0 {
@@ -204,8 +200,8 @@ pub fn is_connections_full()->bool {
 pub fn get_nth_connection(n : i32) -> Connection{
     let cons = CONS.lock().unwrap();
     let con = cons.iter().nth(n as usize).unwrap();
-    let ip = con.split(":").collect::<Vec<&str>>()[0];
-    let port = con.split(":").collect::<Vec<&str>>()[1];
+    let ip = con.split(':').collect::<Vec<&str>>()[0];
+    let port = con.split(':').collect::<Vec<&str>>()[1];
     let conn = Connection{
         id : n,
         ip : ip.to_string(),
@@ -218,13 +214,11 @@ pub fn get_nth_connection(n : i32) -> Connection{
 
 pub fn remove_connection(ip : &str , port : i64){
     let mut cons = CONS.lock().unwrap();
-    let mut cnt = 0;
-    for ipp in cons.iter(){
+    for (cnt,ipp) in cons.iter().enumerate(){
         if ipp == format!("{}:{}" , ip , port).as_str(){
             cons.remove(cnt);
             break;
         }
-        cnt += 1;
     }
     drop(cons);
 }
@@ -255,6 +249,5 @@ pub fn send_message(packet : &PPacket , connection : &Connection ){
 
 pub fn get_my_ip() -> String{
     let output = Command::new("curl").arg("ifconfig.me").output().unwrap();
-    let ip = String::from_utf8(output.stdout).unwrap();
-    ip
+    String::from_utf8(output.stdout).unwrap()
 }

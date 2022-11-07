@@ -57,10 +57,10 @@ impl PPacket{
         PPacket::new(5, format!("{{\"ans\":\"{}\"}}" , answer).as_bytes())
     }
     pub fn is_req_ans(&self) -> bool {
-        return self.command == 5;
+        self.command == 5
     }
     pub fn is_con_req(&self) ->bool{
-        return self.command == 1;
+        self.command == 1
     }
     pub fn con_ques()->PPacket{
         PPacket::new(3, b"")
@@ -71,8 +71,7 @@ impl PPacket{
     pub fn get_ans(&self) -> bool{
         let json = String::from_utf8(self.payload.clone()).unwrap();
         let json = jsonize::from_str(&json);
-        let res = json.get_key("res").as_bool().unwrap();
-        res
+        json.get_key("res").as_bool().unwrap()
     }
     pub fn is_con_ans(&self)->bool{
         self.command == 4
