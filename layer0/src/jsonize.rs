@@ -1,9 +1,10 @@
 use crate::ppacket::PPacket;
 use json::{self, JsonValue};
-
+#[allow(dead_code)]
 pub fn serialize_ppacket(packet : &PPacket)->String{
     serde_json::to_string(&packet).unwrap()
 }
+#[allow(dead_code)]
 pub fn deserialize_ppacket(packet : &str)->PPacket{
     serde_json::from_str(packet).unwrap()
 }

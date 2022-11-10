@@ -108,29 +108,30 @@ fn server_handle(mode :  &'static str , port_number : u16) -> Result<() , Box<dy
     });
     
     loop{
-        //"Waiting for connection..".bright_red().to_string().log(LOGTYPE::INFO);
         let (mut stream , _address) = listener.accept()?;
-        //con_req , con_ques , con_ans
         let initial_packet = read_ppacket(&mut stream)?;
         if initial_packet.is_con_ques(){
             format!("Connection Question from {}", _address.to_string().bright_magenta()).log(LOGTYPE::INFO); 
             send_ppacket(&mut stream, &PPacket::con_ans(!connections::is_connections_full()))?;
         }
-        else if initial_packet.is_con_req(){
-            format!("Connection Request from {}", _address.to_string().bright_magenta()).log(LOGTYPE::INFO); 
-            //this part can be sended to client application for more control ?! dunno
+        else if initial_packet.is_inc_req(){
+            format!("Incoming Request from {}", _address.to_string().bright_magenta()).log(LOGTYPE::INFO); 
             if !connections::is_connections_full(){
                 let client_name = format!("{}:{}" , stream.peer_addr()?.ip() , stream.peer_addr()?.port());
-                let mut cons = connections::TCP_CONS.lock()?;
-                cons.insert(client_name.clone(), stream);
+                connections::add_tcp_con(client_name.to_string(), stream);
                 format!("New connection from {}", _address.to_string().bright_magenta()).log(LOGTYPE::INFO); 
                 thread::spawn(move || {
-                    client::handle_client(client_name.as_str() , mode);
-                });
+                    client::handle_client(client_name.as_str() , mode); 
+                }); //add this threads to a thread-pool to control them
+            }
+            else{
+                //send a reaction to sender or ignore ?
             }
         }
+        //TODO: What about con_income?
+        
         else{
-            //it didn't started with connection request or question!
+            format!("Undefined Request : {}" , _address).log(LOGTYPE::ERROR);
         }
     }
 }

@@ -50,11 +50,24 @@ impl PPacket{
     pub fn pong()->PPacket{
         PPacket::new(2, b"Pong")
     }
+    // con_income : its the kind of ppacket that you recive when you are in listening mode and a con_req comes to you from a node (this means that you are in that node's waiting list)
+    pub fn con_income(sender_ip : &str , sender_port : &str) -> PPacket{
+        PPacket::new(7, format!("{{\"ip\":\"{}\",\"port\":\"{}\"}}" , sender_ip , sender_port).as_bytes())
+    }
+    pub fn is_con_income(&self) -> bool{
+        self.command == 7
+    }
     pub fn con_req(my_ip : &str , my_port : i64)->PPacket{
         PPacket::new(1, format!("{{\"ip\":\"{}\",\"port\":\"{}\"}}" , my_ip , my_port).as_bytes())
     }
     pub fn req_ans(answer : bool) -> PPacket{
         PPacket::new(5, format!("{{\"ans\":\"{}\"}}" , answer).as_bytes())
+    }
+    pub fn inc_req() -> PPacket{
+        PPacket::new(6, "{}".as_bytes())
+    }
+    pub fn is_inc_req(&self) -> bool{
+        self.command == 6
     }
     pub fn is_req_ans(&self) -> bool {
         self.command == 5

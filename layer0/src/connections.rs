@@ -1,9 +1,9 @@
 use std::{time::Duration, error::Error, sync::{Arc, Mutex}, collections::HashMap};
 use colored::Colorize;
 use std::net::TcpStream;
-use crate::{logger::{LOGTYPE, Logger}, ppacket::PPacket, client::{self, show_connections}, wlist::Wlist};
+use crate::{logger::{LOGTYPE, Logger}, ppacket::PPacket, client::{self, show_connections, send_ppacket}, wlist::Wlist};
 
-use std::process::Command;
+
 const CONNECTIONS_LEN :i32 = 8;
 const _CONNECTION_TIME: u64 = 3;
 const WAITING_LIST_LEN : usize = 10;
@@ -197,6 +197,7 @@ pub fn is_connections_full()->bool {
     get_connections_len() >= CONNECTIONS_LEN
 }
 
+#[allow(dead_code)]
 pub fn get_nth_connection(n : i32) -> Connection{
     let cons = CONS.lock().unwrap();
     let con = cons.iter().nth(n as usize).unwrap();
@@ -248,6 +249,25 @@ pub fn send_message(packet : &PPacket , connection : &Connection ){
 }
 
 pub fn get_my_ip() -> String{
-    let output = Command::new("curl").arg("ifconfig.me").output().unwrap();
-    String::from_utf8(output.stdout).unwrap()
+    // let output = Command::new("curl").arg("ifconfig.me").output().unwrap();
+    // String::from_utf8(output.stdout).unwrap()
+    "127.0.0.1".to_string()
+}
+
+#[allow(dead_code)]
+pub fn broadcast_message(packet : &PPacket) -> Result<bool , Box<dyn Error>>{
+    let mut cons = TCP_CONS.lock().unwrap();
+    for (_client_name , tcpcon) in cons.iter_mut(){    
+        send_ppacket(tcpcon, packet)?;
+    }
+    Ok(true)
+}
+pub fn add_tcp_con(name : String , con : TcpStream){
+    let mut cons = TCP_CONS.lock().unwrap();
+    cons.insert(name, con);
+    drop(cons);
+}
+pub fn get_my_port()->u64{
+    let port = *PORT.lock().unwrap();
+    port
 }

@@ -7,7 +7,7 @@ pub fn hash_remover(){
     loop{
         check_connections();
         let number_of_cons = connections::get_connections_len();
-        let is_hardcode = connections::IS_HARDCODE.lock().unwrap().clone();
+        let is_hardcode = *connections::IS_HARDCODE.lock().unwrap();
         if  number_of_cons < 8 && !is_hardcode{
             connections::send_connection_request();
         }
